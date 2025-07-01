@@ -5,6 +5,7 @@ import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
 import { Button } from "@/components/ui/button";
+import { ModelConfig } from "@/types";
 
 export default function App() {
   const [processedEventsTimeline, setProcessedEventsTimeline] = useState<
@@ -20,7 +21,10 @@ export default function App() {
     messages: Message[];
     initial_search_query_count: number;
     max_research_loops: number;
-    reasoning_model: string;
+    query_generator_model: string;
+    web_search_model: string;
+    reflection_model: string;
+    answer_model: string;
   }>({
     apiUrl: import.meta.env.DEV
       ? "http://localhost:2024"
@@ -100,7 +104,7 @@ export default function App() {
   }, [thread.messages, thread.isLoading, processedEventsTimeline]);
 
   const handleSubmit = useCallback(
-    (submittedInputValue: string, effort: string, model: string) => {
+    (submittedInputValue: string, effort: string, modelConfig: ModelConfig) => {
       if (!submittedInputValue.trim()) return;
       setProcessedEventsTimeline([]);
       hasFinalizeEventOccurredRef.current = false;
@@ -138,7 +142,10 @@ export default function App() {
         messages: newMessages,
         initial_search_query_count: initial_search_query_count,
         max_research_loops: max_research_loops,
-        reasoning_model: model,
+        query_generator_model: modelConfig.queryGeneratorModel,
+        web_search_model: modelConfig.webSearchModel,
+        reflection_model: modelConfig.reflectionModel,
+        answer_model: modelConfig.answerModel,
       });
     },
     [thread]

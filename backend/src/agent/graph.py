@@ -23,7 +23,7 @@ from agent.prompts import (
     reflection_instructions,
     answer_instructions,
 )
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import AzureChatOpenAI
 from agent.utils import (
     get_citations,
     get_research_topic,
@@ -44,7 +44,7 @@ genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
 def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
     """LangGraph node that generates search queries based on the User's question.
 
-    Uses Gemini 2.0 Flash to create an optimized search queries for web research based on
+    Uses Azure OpenAI to create optimized search queries for web research based on
     the User's question.
 
     Args:
@@ -60,12 +60,15 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
-    # init Gemini 2.0 Flash
-    llm = ChatGoogleGenerativeAI(
-        model=configurable.query_generator_model,
+    # Get the model to use for query generation
+    query_model = state.get("query_generator_model", configurable.query_generator_model)
+
+    # init Azure OpenAI
+    llm = AzureChatOpenAI(
+        azure_deployment=query_model,
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
         temperature=1.0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
     )
     structured_llm = llm.with_structured_output(SearchQueryList)
 
@@ -95,7 +98,7 @@ def continue_to_web_research(state: QueryGenerationState):
 def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     """LangGraph node that performs web research using the native Google Search API tool.
 
-    Executes a web search using the native Google Search API tool in combination with Gemini 2.0 Flash.
+    Executes a web search using the native Google Search API tool in combination with a configurable Gemini model.
 
     Args:
         state: Current graph state containing the search query and research loop count
@@ -106,6 +109,7 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     """
     # Configure
     configurable = Configuration.from_runnable_config(config)
+    web_model = state.get("web_search_model", configurable.web_search_model)
     formatted_prompt = web_searcher_instructions.format(
         current_date=get_current_date(),
         research_topic=state["search_query"],
@@ -113,7 +117,7 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
 
     # Uses the google genai client as the langchain client doesn't return grounding metadata
     response = genai_client.models.generate_content(
-        model=configurable.query_generator_model,
+        model=web_model,
         contents=formatted_prompt,
         config={
             "tools": [{"google_search": {}}],
@@ -153,7 +157,7 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     configurable = Configuration.from_runnable_config(config)
     # Increment the research loop count and get the reasoning model
     state["research_loop_count"] = state.get("research_loop_count", 0) + 1
-    reasoning_model = state.get("reasoning_model", configurable.reflection_model)
+    reasoning_model = state.get("reflection_model", configurable.reflection_model)
 
     # Format the prompt
     current_date = get_current_date()
@@ -162,12 +166,12 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    # init Reasoning Model
-    llm = ChatGoogleGenerativeAI(
-        model=reasoning_model,
+    # init Azure OpenAI Reasoning Model
+    llm = AzureChatOpenAI(
+        azure_deployment=reasoning_model,
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
         temperature=1.0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
     )
     result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
 
@@ -231,7 +235,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         Dictionary with state update, including running_summary key containing the formatted final summary with sources
     """
     configurable = Configuration.from_runnable_config(config)
-    reasoning_model = state.get("reasoning_model") or configurable.answer_model
+    reasoning_model = state.get("answer_model") or configurable.answer_model
 
     # Format the prompt
     current_date = get_current_date()
@@ -241,12 +245,12 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
 
-    # init Reasoning Model, default to Gemini 2.5 Flash
-    llm = ChatGoogleGenerativeAI(
-        model=reasoning_model,
+    # init Azure OpenAI Reasoning Model
+    llm = AzureChatOpenAI(
+        azure_deployment=reasoning_model,
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
         temperature=0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
     )
     result = llm.invoke(formatted_prompt)
 

@@ -18,7 +18,10 @@ class OverallState(TypedDict):
     initial_search_query_count: int
     max_research_loops: int
     research_loop_count: int
-    reasoning_model: str
+    query_generator_model: str
+    web_search_model: str
+    reflection_model: str
+    answer_model: str
 
 
 class ReflectionState(TypedDict):

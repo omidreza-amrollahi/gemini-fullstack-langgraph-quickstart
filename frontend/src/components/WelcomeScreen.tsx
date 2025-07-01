@@ -1,10 +1,11 @@
 import { InputForm } from "./InputForm";
+import { ModelConfig } from "@/types";
 
 interface WelcomeScreenProps {
   handleSubmit: (
     submittedInputValue: string,
     effort: string,
-    model: string
+    modelConfig: ModelConfig
   ) => void;
   onCancel: () => void;
   isLoading: boolean;
@@ -32,8 +33,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         hasHistory={false}
       />
     </div>
-    <p className="text-xs text-neutral-500">
-      Powered by Google Gemini and LangChain LangGraph.
-    </p>
+    <div className="mt-6 text-center">
+      <p className="text-sm text-yellow-400 font-medium mb-2">
+        ⚠️ Do not enter confidential or sensitive information
+      </p>
+    </div>
   </div>
 );

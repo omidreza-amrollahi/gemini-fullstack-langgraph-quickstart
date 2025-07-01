@@ -1,6 +1,6 @@
 # Gemini Fullstack LangGraph Quickstart
 
-This project demonstrates a fullstack application using a React frontend and a LangGraph-powered backend agent. The agent is designed to perform comprehensive research on a user's query by dynamically generating search terms, querying the web using Google Search, reflecting on the results to identify knowledge gaps, and iteratively refining its search until it can provide a well-supported answer with citations. This application serves as an example of building research-augmented conversational AI using LangGraph and Google's Gemini models.
+This project demonstrates a fullstack application using a React frontend and a LangGraph-powered backend agent. The agent is designed to perform comprehensive research on a user's query by dynamically generating search terms, querying the web using Google Search, reflecting on the results to identify knowledge gaps, and iteratively refining its search until it can provide a well-supported answer with citations. This application serves as an example of building research-augmented conversational AI using LangGraph and Azure OpenAI models.
 
 <img src="./app.png" title="Gemini Fullstack LangGraph" alt="Gemini Fullstack LangGraph" width="90%">
 
@@ -8,7 +8,7 @@ This project demonstrates a fullstack application using a React frontend and a L
 
 - 💬 Fullstack application with a React frontend and LangGraph backend.
 - 🧠 Powered by a LangGraph agent for advanced research and conversational AI.
-- 🔍 Dynamic search query generation using Google Gemini models.
+- 🔍 Dynamic search query generation using Azure OpenAI models.
 - 🌐 Integrated web research via Google Search API.
 - 🤔 Reflective reasoning to identify knowledge gaps and refine searches.
 - 📄 Generates answers with citations from gathered sources.
@@ -29,10 +29,17 @@ Follow these steps to get the application running locally for development and te
 
 -   Node.js and npm (or yarn/pnpm)
 -   Python 3.11+
--   **`GEMINI_API_KEY`**: The backend agent requires a Google Gemini API key.
+-   **Azure OpenAI**: The backend agent requires Azure OpenAI API credentials.
     1.  Navigate to the `backend/` directory.
     2.  Create a file named `.env` by copying the `backend/.env.example` file.
-    3.  Open the `.env` file and add your Gemini API key: `GEMINI_API_KEY="YOUR_ACTUAL_API_KEY"`
+    3.  Open the `.env` file and add your Azure OpenAI credentials:
+        ```
+        AZURE_OPENAI_API_KEY="YOUR_AZURE_OPENAI_API_KEY"
+        AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+        AZURE_OPENAI_API_VERSION="2024-02-01"
+        ```
+-   **Google Search API**: Still required for web search functionality.
+    1.  Add your Gemini API key to the `.env` file: `GEMINI_API_KEY="YOUR_GEMINI_API_KEY"`
 
 **2. Install Dependencies:**
 
@@ -60,6 +67,20 @@ make dev
 This will run the backend and frontend development servers.    Open your browser and navigate to the frontend development server URL (e.g., `http://localhost:5173/app`).
 
 _Alternatively, you can run the backend and frontend development servers separately. For the backend, open a terminal in the `backend/` directory and run `langgraph dev`. The backend API will be available at `http://127.0.0.1:2024`. It will also open a browser window to the LangGraph UI. For the frontend, open a terminal in the `frontend/` directory and run `npm run dev`. The frontend will be available at `http://localhost:5173`._
+
+## 🛠️ Development Tools
+
+### Debugging LangGraph Studio
+
+To debug LangGraph Studio:
+
+1. Start LangGraph in debug mode:
+
+    ```bash
+    langgraph dev --debug-port 5678 --allow-blocking
+    ```
+
+2. Run the VSCode debugger with the appropriate configuration.
 
 ## How the Backend Agent Works (High-Level)
 
