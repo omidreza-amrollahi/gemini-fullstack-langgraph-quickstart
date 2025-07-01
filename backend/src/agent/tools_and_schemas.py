@@ -2,6 +2,12 @@ from typing import List
 from pydantic import BaseModel, Field
 
 
+class SearchDecision(BaseModel):
+    should_search: bool = Field(
+        description="Whether the user's question requires a live web search to provide accurate and up-to-date information."
+    )
+
+
 class SearchQueryList(BaseModel):
     query: List[str] = Field(
         description="A list of search queries to be used for web research."

@@ -1,8 +1,8 @@
 import os
 
-from agent.tools_and_schemas import SearchQueryList, Reflection
+from agent.tools_and_schemas import SearchQueryList, Reflection, SearchDecision
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import Send
 from langgraph.graph import StateGraph
 from langgraph.graph import START, END
@@ -41,6 +41,88 @@ genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 # Nodes
+def decide_search(state: OverallState, config: RunnableConfig) -> OverallState:
+    """LangGraph node that decides whether web search is needed based on the user's question.
+
+    Uses Azure OpenAI to determine if the user's question requires live web search
+    to provide accurate and up-to-date information, or if it can be answered with
+    general knowledge.
+
+    Args:
+        state: Current graph state containing the user's question
+        config: Configuration for the runnable, including LLM provider settings
+
+    Returns:
+        Dictionary with state update, including should_search key indicating whether search is needed
+    """
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get the model to use for search decision
+    query_model = state.get("query_generator_model", configurable.query_generator_model)
+
+    # init Azure OpenAI
+    llm = AzureChatOpenAI(
+        azure_deployment=query_model,
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        temperature=0.1,
+        max_retries=2,
+    )
+    structured_llm = llm.with_structured_output(SearchDecision)
+
+    # Format the prompt
+    system_msg = SystemMessage(
+        content="You are a classifier that must decide whether the user's question requires a live web search to provide accurate and up-to-date information. Consider if the question is about current events, recent developments, specific data, or topics that change frequently."
+    )
+    user_msg = HumanMessage(content=f"Conversation history: {state['messages']}")
+
+    # Generate the search decision
+    result = structured_llm.invoke([system_msg, user_msg])
+    return {"should_search": result.should_search}
+
+
+def generate_answer_without_search(state: OverallState, config: RunnableConfig) -> OverallState:
+    """LangGraph node that generates an answer without web search using the LLM's knowledge.
+
+    Provides a direct answer to the user's question using the model's training data
+    when web search is determined to be unnecessary.
+
+    Args:
+        state: Current graph state containing the user's question
+        config: Configuration for the runnable, including LLM provider settings
+
+    Returns:
+        Dictionary with state update, including messages key containing the generated answer
+    """
+    configurable = Configuration.from_runnable_config(config)
+    reasoning_model = state.get("answer_model") or configurable.answer_model
+
+    # Format the prompt
+    current_date = get_current_date()
+    
+    # init Azure OpenAI
+    llm = AzureChatOpenAI(
+        azure_deployment=reasoning_model,
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        temperature=0.2,
+        max_retries=2,
+    )
+
+    # Create a system message for answering without search
+    system_msg = SystemMessage(
+        content=f"""You are a helpful AI assistant. Answer the user's question using your knowledge as of your training data. 
+        Be clear and informative. If you're uncertain about current information or if the question might benefit from recent data, 
+        mention that limitation in your response. Current date: {current_date}"""
+    )
+    
+    messages = [system_msg] + state["messages"]
+    result = llm.invoke(messages)
+
+    return {
+        "messages": [AIMessage(content=result.content)],
+        "sources_gathered": [],
+    }
+
+
 def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
     """LangGraph node that generates search queries based on the User's question.
 
@@ -269,18 +351,40 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     }
 
 
+def route_after_decision(state: OverallState) -> str:
+    """Routing function that determines whether to proceed with search or generate answer directly.
+
+    Args:
+        state: Current graph state containing the search decision
+
+    Returns:
+        String indicating the next node: "generate_query" for search or "generate_answer_without_search" for direct answer
+    """
+    return "generate_query" if state["should_search"] else "generate_answer_without_search"
+
+
 # Create our Agent Graph
 builder = StateGraph(OverallState, config_schema=Configuration)
 
 # Define the nodes we will cycle between
+builder.add_node("decide_search", decide_search)
 builder.add_node("generate_query", generate_query)
 builder.add_node("web_research", web_research)
 builder.add_node("reflection", reflection)
 builder.add_node("finalize_answer", finalize_answer)
+builder.add_node("generate_answer_without_search", generate_answer_without_search)
 
-# Set the entrypoint as `generate_query`
+# Set the entrypoint as `decide_search`
 # This means that this node is the first one called
-builder.add_edge(START, "generate_query")
+builder.add_edge(START, "decide_search")
+
+# Conditional routing based on search decision
+builder.add_conditional_edges(
+    "decide_search", 
+    route_after_decision, 
+    ["generate_query", "generate_answer_without_search"]
+)
+
 # Add conditional edge to continue with search queries in a parallel branch
 builder.add_conditional_edges(
     "generate_query", continue_to_web_research, ["web_research"]
@@ -293,5 +397,7 @@ builder.add_conditional_edges(
 )
 # Finalize the answer
 builder.add_edge("finalize_answer", END)
+# End for direct answer without search
+builder.add_edge("generate_answer_without_search", END)
 
 graph = builder.compile(name="pro-search-agent")

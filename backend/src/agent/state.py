@@ -22,6 +22,7 @@ class OverallState(TypedDict):
     web_search_model: str
     reflection_model: str
     answer_model: str
+    should_search: bool
 
 
 class ReflectionState(TypedDict):
